@@ -8,16 +8,63 @@ use Carp;
 tie *STDOUT, "Output::Rewrite";
 
 my %rewrite_rule;
+my $modifiers = 'g';
+
 
 sub import {
 	my $class = shift;
 	my %fields = @_;
 	if(ref $fields{rewrite_rule} eq 'HASH'){
 		my %new_rewrite_rule = %{$fields{rewrite_rule}};
-		%rewrite_rule = (%rewrite_rule, %new_rewrite_rule);
+		rewrite_rule(%new_rewrite_rule);
+	}
+	if($fields{modifiers}){
+		modifiers($fields{modifiers});
+	}
+}
+
+sub modifiers {
+	if(defined($_[0])){
+		$modifiers = $_[0];
+	}
+	else{
+		return $modifiers;
+	}
+}
+
+sub rewrite_rule {
+	my %new_rewrite_rule;
+	if(@_ == 1){
+		return $rewrite_rule{$_[0]};
+	}
+	else{
+		%new_rewrite_rule = @_;
+	}
+	%rewrite_rule = (%rewrite_rule, %new_rewrite_rule);
+}
+
+
+
+sub _rewrite {
+	my $self = shift;
+	my $string = shift || return;
+	
+	while(my($from, $to) = each %rewrite_rule){
+		if(ref $to eq 'CODE'){
+			my $new_modifiers = $modifiers;
+			$new_modifiers .= 'e' if($new_modifiers !~ /e/);
+			eval "\$string =~ s/$from/&\$to()/$new_modifiers;";
+		}
+		else{
+			#print STDERR "\$string =~ s/$from/$to/$modifiers;\n";
+			eval "\$string =~ s/$from/$to/$modifiers;";
+		}
+		croak "Output::Rewrite Rewrite error:\n" . $@ if $@;
 	}
 	
+	return $string;
 }
+
 
 sub TIEHANDLE {
 	my $class = shift;
@@ -30,6 +77,7 @@ sub TIEHANDLE {
 
 sub PRINT {
 	my $self = shift;
+	no warnings;
 	my $string = join('', @_);
 	
 	print $self $self->_rewrite($string);
@@ -50,18 +98,6 @@ sub WRITE {
 	syswrite($self, $self->_rewrite($string), $length, $offset);
 }
 
-sub _rewrite {
-	my $self = shift;
-	my $string = shift;
-	
-	while(my($from, $to) = each %rewrite_rule){
-		eval "\$string =~ s/$from/$to/g;";
-		croak "Output::Rewrite Rewrite error:\n" . $@ if $@;
-	}
-	
-	return $string;
-}
-
 
 =head1 NAME
 
@@ -69,11 +105,11 @@ Output::Rewrite - Rewrite your script output.
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
@@ -105,28 +141,86 @@ our $VERSION = '0.01';
     print "1234 I love Marine Corps!\n";
     # 1!2!3!4! I love Marine Corps!
     
+    
+    use Output::Rewrite(
+        modifiers => q/msgi/,
+        rewrite_rule => {
+            '(?-i)Sensitive' => 'SENSITIVE',
+            'NoN sEnsItivE' => 'NON SENSITIVE',
+        },
+    );
+    #or
+    use Output::Rewrite;
+    Output::Rewrite::rewrite_rule(
+            '(?-i)Sensitive' => 'SENSITIVE',
+            'NoN sEnsItivE' => 'NON SENSITIVE',
+    );
+    Output::Rewrite::modifiers('msgi');
+    
 
 =head1 DESCRIPTION
 
-This module helps you to rewrite your script output.
+Output::Rewrite helps you to rewrite your script output.
 
-Set rewrite_rule(regex)  when you load this module.
+When you print(or write, syswrite, printf) to STDOUT, Output::Rewrite hooks output and rewrite this.
+
+
+
+Set rewrite rule(regex) and regex modifiers(i,g,m,s,x) when you load this module, 
 
     use Output::Rewrite (
+        modifiers => 'ig',
         rewrite_rule => {
             'from' => 'to',
         }
     );
 
+or with Output::Rewrite::rewrite_rule() and Output::Rewrite::modifiers().
 
+    use Output::Rewrite;
+    Output::Rewrite::modifiers('ig');
+    Output::Rewrite::rewrite_rule(
+        'from' => 'to',
+    );
+
+This module ties STDOUT so you must use carefully.
 
 =head1 FUNCTIONS
 
-There is no function.
+
+=head2 rewrite_rule
+
+Accessor for rewrite rule.
+
+    Output::Rewrite::rewrite_rule(
+        'from' => 'to',
+        'from' => 'to',
+    );
+
+
+=head2 modifiers
+
+Accessor for substitution modifiers.(i,g,m,s,x)
+Default is 'g'.
+
+    Output::Rewrite::modifiers('msgi');
+    my $modifiers = Output::Rewrite::modifiers;
+
+If you want to apply modifiers only one time, you can use (?imsx-imsx) instead of this.
+For example:
+
+    use Output::Rewrite(
+        modifiers => q/msgi/, 
+        rewrite_rule => {
+            '(?-i)Sensitive' => 'SENSITIVE',
+            'NoN sEnsItivE' => 'NON SENSITIVE',
+        },
+    );
+
 
 =head1 AUTHOR
 
-Hogeist, C<< <mahito at cpan.org> >>
+Hogeist, C<< <mahito at cpan.org> >>, L<http://www.ornithopter.jp/>
 
 =head1 BUGS
 
