@@ -45,4 +45,4 @@ sub module_boilerplate_ok {
     );
 }
 
-module_boilerplate_ok('lib\Output\Rewrite.pm');
+module_boilerplate_ok('lib/Output/Rewrite.pm');
